@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# set -eu
+
+if [ $# != 2 ]; then
+  echo 'Usage: scan-s3file s3://mybucket/path/to/file https://myapi.tld/path/to/notify'
+  exit 1
+fi
+
+FILE_URL=$1
+NOTIFY_URL=$2
+
+DIR=/var/tmp/s3
+mkdir -p $DIR
+aws s3 cp $FILE_URL $DIR
+
+result='completed'
+clamscan --stdout --no-summary --infected $DIR || (result='ng')
+
+echo $result
+
+
