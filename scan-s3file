@@ -1,22 +1,40 @@
 #!/bin/sh
 
-# set -eu
+set -eu
 
-if [ $# != 2 ]; then
-  echo 'Usage: scan-s3file s3://mybucket/path/to/file https://myapi.tld/path/to/notify'
+if [ $# -lt 2 ]; then
+  echo 'Usage: scan-s3file s3://mybucket/path/to/file https://myapi.tld/path/to/notify [$HTTP_METHOD]'
   exit 1
 fi
 
-FILE_URL=$1
-NOTIFY_URL=$2
+if [ $# -ge 3 ]; then
+  HTTP_METHOD=$3
+else
+  HTTP_METHOD='POST'
+fi
 
 DIR=/var/tmp/s3
+FILE_URL=$1
+NOTIFY_URL=$2
+FILE_NAME=$(basename $FILE_URL)
+LOCAL_FILE=$DIR/$FILE_NAME
+
+
 mkdir -p $DIR
-aws s3 cp $FILE_URL $DIR
+aws s3 cp $FILE_URL $LOCAL_FILE
+HASH=$(md5sum $LOCAL_FILE  | awk '{ print $1 }')
+SIZE=$(wc -c $LOCAL_FILE | awk '{ print $1 }')
 
-result='completed'
-clamscan --stdout --no-summary --infected $DIR || (result='ng')
+RESULT='completed'
+clamscan --no-summary --infected $DIR || eval 'RESULT=ng'
 
-echo $result
+JSON="{
+  \"content_hash\": \"${HASH}\",
+  \"content_size\": ${SIZE},
+  \"status\": \"${RESULT}\"
+}"
 
-
+curl -X $HTTP_METHOD \
+  -H 'Content-Type: application/json' \
+  -d "$JSON" \
+  $NOTIFY_URL
